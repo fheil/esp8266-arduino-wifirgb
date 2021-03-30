@@ -3,60 +3,138 @@
 #include <ESP8266WebServer.h>
 #include <ESP8266mDNS.h>
 #include <ArduinoJson.h>
+#include <WiFiUdp.h>
+#include <ArduinoOTA.h>
+#include <FadeLed.h>
+#include <hl_DebugDefines_Off.h>
 
-#include "names.h"
+#include "WifiRGB.h"
 #include "web_admin.h"
 #include "web_interface.h"
 #include "web_iro_js.h"
 
-const char* ssid = "your_ssid";
-const char* password = "your_wifi_password";
-const char* deviceName = "wifi-rgb";
+#ifdef SAVE2EEPROM
+#include "WifiRGB2EEPROM.h"
+#endif
 
-#define BUILTIN_LED 2 // internal ESP-12 LED on GPIO2
-
-#define REDPIN 12
-#define GREENPIN 14
-#define BLUEPIN 5
+FadeLed led[3] = {REDPIN, GREENPIN, BLUEPIN};
+bool bPowerOn = true;
+byte btMode = modeOFF;
+uint16_t j = 0;
+uint16_t nStep = 1;
+double f = LED_FLASH_RATIO;
 
 ESP8266WebServer server(80);
 IPAddress clientIP(192, 168, 178, 254); //the IP of the device
 IPAddress gateway(192, 168, 178, 1); //the gateway
 IPAddress subnet(255, 255, 255, 0); //the subnet mask
 
+#ifdef SAVE2EEPROM
+// Declare a global object variable from the WiFiRGB2EEPROM class.
+WiFiRGB2EEPROM eepromHandler;
+#endif
+
+void ledBuiltinFlasher (int, int);
+void resetOutputs(void);
+void setSavedOutputsPowerOn(void);
+void setSavedOutputsPowerOn(void);
+void ledStopAll(void);
+void Wheel(byte);
+
 void setup(void) {
-  Serial.begin(115200);
+  debugBegin(115200);
+
+#ifdef SAVE2EEPROM
+  setSavedOutputsPowerOn();
+#endif
+
+  pinMode(LED_BUILTIN, OUTPUT); // Initialize the BUILTIN_LED pin as an output
 
   WiFi.mode(WIFI_STA);
   WiFi.hostname(deviceName);
+
+#ifndef DHCP
   WiFi.config(clientIP, gateway, subnet); // Remove for DHCP
+#endif
 
   WiFi.begin(ssid, password);
-  Serial.println("");
+  debugPrintln("");
 
   // Wait for connection
   while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
+    // flash internal LED while connecting to WiFi
+    ledBuiltinFlasher (4, 150);
   }
-  Serial.println("");
-  Serial.print("Connected to ");
-  Serial.println(ssid);
-  Serial.print("IP address: ");
-  Serial.println(WiFi.localIP());
+  debugPrintln("");
+  debugPrint("Connected to ");
+  debugPrintln(ssid);
+  debugPrint("IP address: ");
+  debugPrintln(WiFi.localIP());
 
   if (MDNS.begin("esp8266")) {
-    Serial.println("MDNS responder started");
+    debugPrintln("MDNS responder started");
   }
 
-  pinMode(BUILTIN_LED, OUTPUT); // Initialize the BUILTIN_LED pin as an output
-  digitalWrite(BUILTIN_LED, LOW); // Turn the LED ON by making the voltage LOW after wifi is connected
+  digitalWrite(LED_BUILTIN, LED_BUILTIN_MODE); // Turn the LED ON/OFF as #defined after wifi is connected
 
+#ifdef OTA
+  // Port defaults to 8266
+  // ArduinoOTA.setPort(8266);
+
+  // Hostname defaults to esp8266-[ChipID]
+  // ArduinoOTA.setHostname("myesp8266");
+
+  // No authentication by default
+  // ArduinoOTA.setPassword("admin");
+
+  // Password can be set with it's md5 value as well
+  // MD5(admin) = 21232f297a57a5a743894a0e4a801fc3
+  // ArduinoOTA.setPasswordHash("21232f297a57a5a743894a0e4a801fc3");
+
+  ArduinoOTA.onStart([]() {
+    String type;
+    if (ArduinoOTA.getCommand() == U_FLASH) {
+      type = "sketch";
+    } else { // U_FS
+      type = "filesystem";
+    }
+
+    // NOTE: if updating FS this would be the place to unmount FS using FS.end()
+    debugPrintln("Start updating " + type);
+  });
+  ArduinoOTA.onEnd([]() {
+    debugPrintln("\nEnd");
+  });
+  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
+    Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
+  });
+  ArduinoOTA.onError([](ota_error_t error) {
+    debugPrint("Error[");
+    debugPrint(error);
+    debugPrint("]");
+    if (error == OTA_AUTH_ERROR) {
+      debugPrintln("Auth Failed");
+    } else if (error == OTA_BEGIN_ERROR) {
+      debugPrintln("Begin Failed");
+    } else if (error == OTA_CONNECT_ERROR) {
+      debugPrintln("Connect Failed");
+    } else if (error == OTA_RECEIVE_ERROR) {
+      debugPrintln("Receive Failed");
+    } else if (error == OTA_END_ERROR) {
+      debugPrintln("End Failed");
+    }
+  });
+  ArduinoOTA.begin();
+#endif
+
+#ifndef SAVE2EEPROM
   // adjust the PWM range
   // see https://esp8266.github.io/Arduino/versions/2.0.0/doc/reference.html#analog-output
   analogWriteRange(255);
 
   resetOutputs();
+#endif
+
   // Root and 404
   server.on("/", handleRoot);
   server.onNotFound(handleNotFound);
@@ -71,24 +149,30 @@ void setup(void) {
   server.on("/iro.min.js", HTTP_GET, []() {
     server.send_P(200, "application/javascript", IRO_JS);
   });
-   
+
   // REST-API
   server.on("/api/v1/state", HTTP_POST, handleApiRequest);
   server.on("/api/v1/reset", HTTP_GET, resetOutputs);
 
   server.begin();
-  Serial.println("WifiRGB HTTP server started");
+  debugPrintln("WifiRGB HTTP server started");
 }
 
 void loop(void) {
   server.handleClient();
+  FadeLed::update();
+  if (bPowerOn) {
+    handleFading();
+  }
+#ifdef OTA
+  ArduinoOTA.handle();
+#endif
 }
 
 
 void handleRoot() {
   server.send(200, "text/plain", "hello from esp8266 wifi rgb!");
 }
-
 
 void handleNotFound() {
   String message = "File Not Found\n\n";
@@ -106,9 +190,11 @@ void handleNotFound() {
 }
 
 void handleApiRequest() {
+  RGB rgb = {0, 0, 0};
+  int brightness;
 
-  Serial.println("### API Request:");
-    /* 
+  debugPrintln("### API Request:");
+  /*
     // DEBUG CODE
     String headers;
     headers += "HTTP Headers:\n";
@@ -116,16 +202,16 @@ void handleApiRequest() {
     headers += "\n";
 
     for (uint8_t i = 0; i < server.headers(); i++) {
-      headers += " " + server.headerName(i) + ": " + server.header(i) + "\n";
+    headers += " " + server.headerName(i) + ": " + server.header(i) + "\n";
     }
-    Serial.println(headers);
-    */
-    if (server.hasArg("plain") == false) { //Check if body received
-      server.send(200, "text/plain", "Body not received");
-      return;
-    }
+    debugPrintln(headers);
+  */
+  if (server.hasArg("plain") == false) { //Check if body received
+    server.send(200, "text/plain", "Body not received");
+    return;
+  }
 
-    /*
+  /*
     // DEBUG CODE
     String message;
     headers += "HTTP args:\n";
@@ -133,105 +219,307 @@ void handleApiRequest() {
     message += "\n";
 
     for (uint8_t i = 0; i < server.args(); i++) {
-      message += " " + server.argName(i) + ": " + server.arg(i) + "\n";
+    message += " " + server.argName(i) + ": " + server.arg(i) + "\n";
     }
-    Serial.println(message);
-    Serial.println(server.arg("plain"));
-    */
-    
-    const size_t bufferSize = JSON_OBJECT_SIZE(3) + JSON_OBJECT_SIZE(4) + 70;
-    DynamicJsonBuffer jsonBuffer(bufferSize);
-    JsonObject& root = jsonBuffer.parseObject(server.arg("plain"));
+    debugPrintln(message);
+    debugPrintln(server.arg("plain"));
+  */
 
-    Serial.println("JSON Body: ");
-    root.printTo(Serial);
-    Serial.println();
+  const size_t bufferSize = JSON_OBJECT_SIZE(3) + JSON_OBJECT_SIZE(4) + 70;
+  DynamicJsonDocument jsonDocument(bufferSize);
+  deserializeJson(jsonDocument, server.arg("plain"));
 
-    const char* state = root["state"]; // "ON" or "OFF"
-    if(strcmp("OFF", state) == 0) {
-       Serial.println("State OFF found: switching off");
-      // Set Output
-      analogWrite(REDPIN, 0);
-      analogWrite(GREENPIN, 0);
-      analogWrite(BLUEPIN, 0);
+  debugPrintln("JSON Body: ");
+  serializeJson(jsonDocument, Serial);
+  debugPrintln();
 
-      server.send(200, "application/json", server.arg("plain"));
-      return;
+  JsonObject root = jsonDocument.as<JsonObject>();
+  const char* state = root["state"]; // "ON" or "OFF"
+
+  //leds are off, turn on, read rgb-values from EEPROM
+#ifdef SAVE2EEPROM
+  if ((!bPowerOn) && (strcmp("ON", state) == 0))
+  {
+    debugPrintln("Reading RGB values from memory...");
+    rgb.r = eepromHandler.getColorR();
+    rgb.g = eepromHandler.getColorG();
+    rgb.b = eepromHandler.getColorB();
+    brightness = 100;
+
+    bPowerOn = true;
+  }
+#endif
+  ledStopAll();
+  FadeLed::update();
+
+  //only save values to EEPROM, when switching off
+  if (strcmp("OFF", state) == 0)
+  {
+    debugPrintln("State OFF found: switching off");
+    // Set output to off
+    ledSetAllRGB (0, 0 , 0);
+    FadeLed::update();
+
+#ifdef SAVE2EEPROM
+    //save color to EEPROM
+    if (bPowerOn) {
+      eepromHandler.WriteRGBValues();
     }
+#endif
 
-    int brightness = root["brightness"];
-    Serial.print("Brightness: ");
-    Serial.println(brightness);
-
-    // DEBUG: color
-    Serial.print("Color: ");
-    root["color"].printTo(Serial);
-    Serial.println();
-
-    RGB rgb = {0, 0, 0};
-    JsonObject& color = root["color"];
-        
-    // If RGB mode: Parse RGB values
-    if(color["mode"] == "rgb") { 
-      // Indeed, the JsonVariant returned by root["..."] has a special implementation of the == operator that knows how to compare string safely. 
-      // See https://arduinojson.org/faq/why-does-my-device-crash-or-reboot/
-      Serial.println("Reading RGB values...");
-      rgb.r = color["r"];
-      rgb.b = color["b"];
-      rgb.g = color["g"];
-    }
-
-    // If HSV mode: Parse HSV values
-    if(color["mode"] == "hsv") {  
-      // Indeed, the JsonVariant returned by root["..."] has a special implementation of the == operator that knows how to compare string safely. 
-      // See https://arduinojson.org/faq/why-does-my-device-crash-or-reboot/
-      Serial.println("Reading HSV values...");
-      rgb = hsvToRgb(color["h"], color["s"], color["v"]);
-    }
-
-    // DEBUG: Parsed values
-    Serial.println("Parsed Values:");
-    Serial.print("r=");
-    Serial.print(rgb.r);
-    Serial.print(", g=");
-    Serial.print(rgb.g);
-    Serial.print(", b=");
-    Serial.println(rgb.b);
-
-    // Map Brightness
-    byte mappedRed = map(rgb.r, 0, 100, 0, brightness);
-    byte mappedGreen = map(rgb.g, 0, 100, 0, brightness);
-    byte mappedBlue = map(rgb.b, 0, 100, 0, brightness);
-
-    // DEBUG: Brighness Mapped values
-    Serial.println("Brighness Mapped RGB Values:");
-    Serial.print("r=");
-    Serial.print(mappedRed);
-    Serial.print(", g=");
-    Serial.print(mappedGreen);
-    Serial.print(", b=");
-    Serial.println(mappedBlue);
-
-
-    // TODO: support different modes
-    const char* jsonrgbmode = root["mode"]; // "SOLID"
-
-    // Set Output
-    analogWrite(REDPIN, mappedRed);
-    analogWrite(GREENPIN, mappedGreen);
-    analogWrite(BLUEPIN, mappedBlue);
+    bPowerOn = false;
 
     server.send(200, "application/json", server.arg("plain"));
+    return;
+  }
+
+  // support different modes
+  const char* jsonrgbmode = root["mode"]; // "SOLID"
+  if (strcmp("RAINBOW", jsonrgbmode) == 0) {
+    ledSetAllTime(LED_RAINBOW_TIME);
+
+    btMode = modeRAINBOW;
+    server.send(200, "application/json", server.arg("plain"));
+    return;
+  }
+  if (strcmp("SUNSET", jsonrgbmode) == 0) {
+    ledSetAllTime(LED_SUNSET_TIME);
+    //    j = 17;
+    btMode = modeSUNSET;
+    server.send(200, "application/json", server.arg("plain"));
+    return;
+  }
+  if (strcmp("POLAR", jsonrgbmode) == 0) {
+    ledSetAllTime(LED_POLAR_TIME);
+    //    j = 14;
+    //    eepromHandlerSetAllRGB (myRGB[j].r, myRGB[j].g, myRGB[j].b);
+    btMode = modePOLAR;
+    server.send(200, "application/json", server.arg("plain"));
+    return;
+  }
+  if (strcmp("TRUERGB", jsonrgbmode) == 0) {
+    ledSetAllTime(LED_TRUERGB_TIME);
+    //    j = 14;
+    //    eepromHandlerSetAllRGB (myRGB[j].r, myRGB[j].g, myRGB[j].b);
+    btMode = modeTRUERGB;
+    server.send(200, "application/json", server.arg("plain"));
+    return;
+  }
+  if (strcmp("2OFRGB", jsonrgbmode) == 0) {
+    ledSetAllTime(LED_2OFRGB_TIME);
+    //    j = 14;
+    //    eepromHandlerSetAllRGB (myRGB[j].r, myRGB[j].g, myRGB[j].b);
+    btMode = mode2OFRGB;
+    server.send(200, "application/json", server.arg("plain"));
+    return;
+  }
+
+  // for static modes we change color, brightness etc. so get more values from the ui
+  brightness = root["brightness"];
+  debugPrint("Brightness: ");
+  debugPrintln(brightness);
+
+  // DEBUG: color
+  debugPrint("Color: ");
+  serializeJson(root["color"], Serial);
+  debugPrintln();
+
+  JsonObject color = root["color"];
+  // If RGB mode: Parse RGB values
+  if (color["mode"] == "rgb") {
+    // Indeed, the JsonVariant returned by root["..."] has a special implementation of the == operator that knows how to compare string safely.
+    // See https://arduinojson.org/faq/why-does-my-device-crash-or-reboot/
+    debugPrintln("Reading RGB values from Json...");
+
+    rgb.r = map(color["r"], 0, 255, 0, 100);
+    rgb.g = map(color["g"], 0, 255, 0, 100);
+    rgb.b = map(color["b"], 0, 255, 0, 100);
+  }
+
+  // If HSV mode: Parse HSV values
+  if (color["mode"] == "hsv") {
+    // Indeed, the JsonVariant returned by root["..."] has a special implementation of the == operator that knows how to compare string safely.
+    // See https://arduinojson.org/faq/why-does-my-device-crash-or-reboot/
+    debugPrintln("Reading HSV values...");
+    rgb = hsvToRgb(color["h"], color["s"], color["v"]);
+  }
+
+  // DEBUG: Parsed values
+  debugPrintln("Parsed Values:");
+  debugPrint("r=");
+  debugPrint(rgb.r);
+  debugPrint(", g=");
+  debugPrint(rgb.g);
+  debugPrint(", b=");
+  debugPrintln(rgb.b);
+
+  if (strcmp("SOLID", jsonrgbmode) == 0) {
+    ledSetAllTime(LED_FADE_TIME);
+
+    btMode = modeSOLID;
+  }
+
+  if (strcmp("FLASH", jsonrgbmode) == 0) {
+    ledSetAllTime(LED_FLASH_TIME);
+
+    btMode = modeFLASH;
+  }
+  if (strcmp("BREATHE", jsonrgbmode) == 0) {
+    ledSetAllTime(LED_FADE_TIME * 2);
+
+    btMode = modeBREATHE;
+  }
+
+  // Set Output
+  ledSetAllRGB (rgb.r, rgb.g , rgb.b);
+
+#ifdef SAVE2EEPROM
+  if ((btMode == modeSOLID) || (btMode == modeBREATHE) || (btMode == modeFLASH))
+    eepromHandlerSetAllRGB (rgb.r, rgb.g, rgb.b);
+#endif
+
+  server.send(200, "application/json", server.arg("plain"));
+}
+
+void handleFading()
+{
+  if (btMode == modeSOLID) {
+    ledSetAllRGB (eepromHandler.getColorR(), eepromHandler.getColorG(), eepromHandler.getColorB());
+  }
+  else {
+    if (led[iR].done() && led[iG].done() && led[iB].done()) {
+      switch (btMode)
+      {
+        case modeFLASH:
+          {
+            if (led[iR].get() || led[iG].get() || led[iB].get())
+            {
+              led[iR].off();
+              led[iG].off();
+              led[iB].off();
+            }
+            //or at off
+            else {
+              //then we are done fading down, let's fade up again
+              ledSetAllRGB (eepromHandler.getColorR(), eepromHandler.getColorG(), eepromHandler.getColorB());
+            }
+            break;
+          }
+        case modeBREATHE:
+          {
+            if ((led[iR].get() == eepromHandler.getColorR()) &&
+                (led[iG].get() == eepromHandler.getColorG()) &&
+                (led[iB].get() == eepromHandler.getColorB()) )
+            {
+              //fading done, fade down
+              ledSetAllRGB ((int) (f * eepromHandler.getColorR()), (int) (f * eepromHandler.getColorG()), (int) (f * eepromHandler.getColorB()));
+            }
+            //fade up
+            else {
+              ledSetAllRGB (eepromHandler.getColorR(), eepromHandler.getColorG(), eepromHandler.getColorB());
+            }
+
+            break;
+          }
+        case modeRAINBOW:
+          {
+            Wheel(j++);
+            j %= 100;
+
+            ledSetAllRGB (eepromHandler.getColorR(), eepromHandler.getColorG(), eepromHandler.getColorB());
+            break;
+          }
+
+        case modeSUNSET:
+          {
+            j++;
+            j %= 3;
+
+            ledSetAllRGB (RGBGradient[btMode - modeSUNSET][j].r, RGBGradient[btMode - modeSUNSET][j].g, RGBGradient[btMode - modeSUNSET][j].b);
+            break;
+          }
+        case modePOLAR:
+          {
+            j++;
+            j %= 3;
+
+            ledSetAllRGB (RGBGradient[btMode - modeSUNSET][j].r, RGBGradient[btMode - modeSUNSET][j].g, RGBGradient[btMode - modeSUNSET][j].b);
+            break;
+          }
+        case modeTRUERGB:
+          {
+            j++;
+            j %= 3;
+
+            ledSetAllRGB (RGBGradient[btMode - modeSUNSET][j].r, RGBGradient[btMode - modeSUNSET][j].g, RGBGradient[btMode - modeSUNSET][j].b);
+            break;
+          }
+        case mode2OFRGB:
+          {
+            j++;
+            j %= 3;
+
+            ledSetAllRGB (RGBGradient[btMode - modeSUNSET][j].r, RGBGradient[btMode - modeSUNSET][j].g, RGBGradient[btMode - modeSUNSET][j].b);
+            break;
+          }
+        default:
+          {
+            //ledSetAllRGB (eepromHandler.getColorR(), eepromHandler.getColorG(), eepromHandler.getColorB());
+            break;
+          }
+      }
+    }
+  }
 }
 
 void resetOutputs() {
-  analogWrite(REDPIN, 255);
-  analogWrite(GREENPIN, 255);
-  analogWrite(BLUEPIN, 255);
-  
-  analogWrite(REDPIN, 0);
-  analogWrite(GREENPIN, 0);
-  analogWrite(BLUEPIN, 0);
+  led[iR].begin(0);
+  led[iG].begin(0);
+  led[iB].begin(0);
+
+  FadeLed::update();
+}
+
+#ifdef SAVE2EEPROM
+void setSavedOutputs() {
+  debugPrintln("EEPROM: start restore data...");
+  eepromHandler.ReadRGBValues();
+
+  ledSetAllRGB (eepromHandler.getColorR(), eepromHandler.getColorG(), eepromHandler.getColorB());
+
+  debugPrintln("EEPROM: finished, data restored");
+}
+
+void setSavedOutputsPowerOn() {
+  resetOutputs();
+
+  ledSetAllTime(LED_FADE_TIME);
+
+  FadeLed::update();
+
+  setSavedOutputs();
+
+  while (!led[iR].done() || !led[iG].done() || !led[iB].done())
+  {
+    FadeLed::update();
+  }
+}
+#endif
+
+void Wheel(byte WheelPos) {
+  if (WheelPos < 33)
+  {
+    eepromHandlerSetAllRGB ((WheelPos * 3), (100 - WheelPos * 3), 0);
+  }
+  else if (WheelPos < 66)
+  {
+    WheelPos -= 33;
+    eepromHandlerSetAllRGB ((100 - WheelPos * 3), 0, (WheelPos * 3));
+  }
+  else {
+    WheelPos -= 66;
+    eepromHandlerSetAllRGB (0, (WheelPos * 3), (100 - WheelPos * 3));
+  }
 }
 
 // this is a modified version of https://gist.github.com/hdznrrd/656996
@@ -250,7 +538,7 @@ RGB hsvToRgb(double h, double s, double v) {
   if (s == 0) {
     // Achromatic (grey)
     r = g = b = round(v * 255);
-    return {0,0,0};
+    return {0, 0, 0};
   }
 
   h /= 60; // sector 0 to 5
@@ -290,6 +578,41 @@ RGB hsvToRgb(double h, double s, double v) {
       g = round(255 * p);
       b = round(255 * q);
   }
-
   return {r, g, b};
+}
+
+void eepromHandlerSetAllRGB (int r, int g, int b)
+{
+  eepromHandler.setColorR(r);
+  eepromHandler.setColorG(g);
+  eepromHandler.setColorB(b);
+}
+
+void ledSetAllRGB (int r, int g, int b)
+{
+  led[iR].set(r);
+  led[iG].set(g);
+  led[iB].set(b);
+}
+
+void ledStopAll(void)
+{
+  led[iR].stop();
+  led[iG].stop();
+  led[iB].stop();
+}
+
+void ledSetAllTime(int t)
+{
+  led[iR].setTime(t, true);
+  led[iG].setTime(t, true);
+  led[iB].setTime(t, true);
+}
+
+void ledBuiltinFlasher (int count, int delayTime) {
+  for (int i = 0; i < count * 2; i++) {
+    digitalWrite (LED_BUILTIN, i % 2);
+    debugPrint(".");
+    delay (delayTime);
+  }
 }
