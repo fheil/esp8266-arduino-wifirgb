@@ -32,15 +32,15 @@ IPAddress gateway(192, 168, 178, 1); //the gateway
 IPAddress subnet(255, 255, 255, 0); //the subnet mask
 ```
 
-If you want to use DHCP just ignore those settings and comment or remove the following line:
+If you want to use DHCP just uncomment the following define in WifiRGB.h:
 ```c
-WiFi.config(clientIP, gateway, subnet);
+#define WiFi.config(clientIP, gateway, subnet);
 ```
 
 #### Internal LED
 The internal microcontroller LED is used to indicate the Wifi connection status.
 ```c
-#define BUILTIN_LED 2 // internal ESP-12 LED on GPIO2
+#define DHCP                    // if defined, DHCP will be used for IP-address
 ```
 
 #### RGB Output Pins
