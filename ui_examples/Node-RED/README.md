@@ -1,6 +1,6 @@
 Here is a simple flow for Node-RED
 
-It has the ability to ON/OFF your esp6266 WifiRGB-Controller, you can pick a color and you pick one of the different modes.
+It has the ability to ON/OFF your esp6266 WifiRGB-controller, you can pick a color and you pick one of the different modes.
 Color picking does not work directly if you are in an animated light mode. If you switch to SOLID, FLASH or BREATHE, you WifiRGB
 will show the color picked up before. Try it out ...
 
@@ -10,4 +10,4 @@ Screenshot of Node-RED flow-editor
 
 Screenshot of UI in Node-RED dashboard
 
-![WifiRGB Screenshot in ui dashboard](imgs/nodered-ui.png?raw=true "Title")
+![WifiRGB Screenshot in ui dashboard](../../imgs/nodered-ui.png?raw=true "Title")
