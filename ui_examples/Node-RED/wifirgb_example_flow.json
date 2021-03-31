@@ -1,1 +1,538 @@
-  
+  [
+    {
+        "id": "dfa044c9.744ad8",
+        "type": "tab",
+        "label": "WiFiRGB example",
+        "disabled": false,
+        "info": ""
+    },
+    {
+        "id": "2ce083ef.09b3dc",
+        "type": "group",
+        "z": "dfa044c9.744ad8",
+        "name": "myRoom - WifiRGB_LED_01",
+        "style": {
+            "label": true,
+            "color": "#000000",
+            "fill": "#ffffbf",
+            "fill-opacity": "0.47"
+        },
+        "nodes": [
+            "a21f73ef.bd9ff",
+            "1d55d928.378707",
+            "3d0da505.51932a",
+            "6a406694.c5d4b8",
+            "ce2e7532.f90bb8",
+            "a8a13019.f6424",
+            "cfcaad52.bbeb7",
+            "2509a285.9f0eee",
+            "5fd8dc93.19daa4",
+            "ff737c0.2dcf388",
+            "e3e8d167.aa3be",
+            "cf704047.10311",
+            "94e71672.6d39c8",
+            "37f2da6f.cbd876"
+        ],
+        "x": 34,
+        "y": 33,
+        "w": 1192,
+        "h": 428
+    },
+    {
+        "id": "cf704047.10311",
+        "type": "group",
+        "z": "dfa044c9.744ad8",
+        "g": "2ce083ef.09b3dc",
+        "name": "definition of vars",
+        "style": {
+            "fill": "#c8e7a7",
+            "label": true
+        },
+        "nodes": [
+            "25911a12.eda976",
+            "88774ac5.a45488"
+        ],
+        "x": 74,
+        "y": 59,
+        "w": 432,
+        "h": 82
+    },
+    {
+        "id": "94e71672.6d39c8",
+        "type": "group",
+        "z": "dfa044c9.744ad8",
+        "g": "2ce083ef.09b3dc",
+        "name": "debug widget tool",
+        "style": {
+            "label": true,
+            "fill": "#bfdbef"
+        },
+        "nodes": [
+            "9f7f7308.3ec44",
+            "6663d8dc.910ca8",
+            "6610e73e.b24ff8"
+        ],
+        "x": 574,
+        "y": 59,
+        "w": 612,
+        "h": 82
+    },
+    {
+        "id": "a21f73ef.bd9ff",
+        "type": "function",
+        "z": "dfa044c9.744ad8",
+        "g": "2ce083ef.09b3dc",
+        "name": "",
+        "func": "var LEDVars=global.get('vars_wifi-ledrgb-01');\n//*********************\nvar rgb = msg.payload.split(\",\");\n\nLEDVars[2] = parseInt(rgb[0].substring(4, 7));\nLEDVars[3] = parseInt(rgb[1]);\nLEDVars[4] = parseInt(rgb[2]);\n\nglobal.set('vars_wifi-ledrgb-01', LEDVars);\n\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "x": 540,
+        "y": 300,
+        "wires": [
+            [
+                "ff737c0.2dcf388"
+            ]
+        ]
+    },
+    {
+        "id": "1d55d928.378707",
+        "type": "json",
+        "z": "dfa044c9.744ad8",
+        "g": "2ce083ef.09b3dc",
+        "name": "",
+        "property": "payload",
+        "action": "",
+        "pretty": false,
+        "x": 870,
+        "y": 360,
+        "wires": [
+            [
+                "6a406694.c5d4b8",
+                "e3e8d167.aa3be"
+            ]
+        ]
+    },
+    {
+        "id": "3d0da505.51932a",
+        "type": "ui_colour_picker",
+        "z": "dfa044c9.744ad8",
+        "g": "2ce083ef.09b3dc",
+        "name": "Colour Picker",
+        "label": "Pick colour",
+        "group": "17e97dec.aeb212",
+        "format": "rgb",
+        "outformat": "string",
+        "showSwatch": true,
+        "showPicker": true,
+        "showValue": true,
+        "showHue": false,
+        "showAlpha": false,
+        "showLightness": true,
+        "square": "false",
+        "dynOutput": "false",
+        "order": 3,
+        "width": 0,
+        "height": 0,
+        "passthru": true,
+        "topic": "",
+        "x": 360,
+        "y": 300,
+        "wires": [
+            [
+                "a21f73ef.bd9ff"
+            ]
+        ]
+    },
+    {
+        "id": "6a406694.c5d4b8",
+        "type": "debug",
+        "z": "dfa044c9.744ad8",
+        "g": "2ce083ef.09b3dc",
+        "name": "",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1050,
+        "y": 420,
+        "wires": []
+    },
+    {
+        "id": "ce2e7532.f90bb8",
+        "type": "ui_switch",
+        "z": "dfa044c9.744ad8",
+        "g": "2ce083ef.09b3dc",
+        "name": "",
+        "label": "Switch on/off",
+        "tooltip": "",
+        "group": "17e97dec.aeb212",
+        "order": 2,
+        "width": "0",
+        "height": "0",
+        "passthru": true,
+        "decouple": "false",
+        "topic": "",
+        "style": "",
+        "onvalue": "ON",
+        "onvalueType": "str",
+        "onicon": "",
+        "oncolor": "",
+        "offvalue": "OFF",
+        "offvalueType": "str",
+        "officon": "",
+        "offcolor": "",
+        "x": 370,
+        "y": 360,
+        "wires": [
+            [
+                "a8a13019.f6424"
+            ]
+        ]
+    },
+    {
+        "id": "a8a13019.f6424",
+        "type": "function",
+        "z": "dfa044c9.744ad8",
+        "g": "2ce083ef.09b3dc",
+        "name": "",
+        "func": "var LEDVars=global.get('vars_wifi-ledrgb-01');\n//*********************\nvar state = msg.payload;\n\nLEDVars[0] = state;\nglobal.set('vars_wifi-ledrgb-01', LEDVars);\n\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "x": 540,
+        "y": 360,
+        "wires": [
+            [
+                "ff737c0.2dcf388"
+            ]
+        ]
+    },
+    {
+        "id": "cfcaad52.bbeb7",
+        "type": "inject",
+        "z": "dfa044c9.744ad8",
+        "g": "2ce083ef.09b3dc",
+        "name": "INIT select mode",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "0.5",
+        "topic": "",
+        "payload": "vars_wifi-ledrgb-02[5]",
+        "payloadType": "global",
+        "x": 170,
+        "y": 420,
+        "wires": [
+            [
+                "37f2da6f.cbd876"
+            ]
+        ]
+    },
+    {
+        "id": "2509a285.9f0eee",
+        "type": "function",
+        "z": "dfa044c9.744ad8",
+        "g": "2ce083ef.09b3dc",
+        "name": "",
+        "func": "var LEDVars=global.get('vars_wifi-ledrgb-01');\n//*********************\n\nLEDVars[5] = msg.payload;\nglobal.set('vars_wifi-ledrgb-01', LEDVars);\n\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "x": 540,
+        "y": 420,
+        "wires": [
+            [
+                "ff737c0.2dcf388"
+            ]
+        ]
+    },
+    {
+        "id": "5fd8dc93.19daa4",
+        "type": "inject",
+        "z": "dfa044c9.744ad8",
+        "g": "2ce083ef.09b3dc",
+        "name": "INIT Switch",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "0.5",
+        "topic": "",
+        "payload": "vars_wifi-ledrgb-02[0]",
+        "payloadType": "global",
+        "x": 150,
+        "y": 360,
+        "wires": [
+            [
+                "ce2e7532.f90bb8"
+            ]
+        ]
+    },
+    {
+        "id": "ff737c0.2dcf388",
+        "type": "function",
+        "z": "dfa044c9.744ad8",
+        "g": "2ce083ef.09b3dc",
+        "name": "",
+        "func": "var LEDVars=global.get('vars_wifi-ledrgb-01');\n//*********************\n\nmsg.payload = {\n  \"state\": LEDVars[0],\n  \"brightness\": LEDVars[1],\n  \"color\": {\n      \"mode\": \"rgb\",\n      \"r\": LEDVars[2],\n      \"g\": LEDVars[3],\n      \"b\": LEDVars[4]\n  },\n  \"mode\": LEDVars[5],\n  \"device\": \"01\"\n  }\n\nreturn msg;\n",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "x": 720,
+        "y": 360,
+        "wires": [
+            [
+                "1d55d928.378707"
+            ]
+        ]
+    },
+    {
+        "id": "e3e8d167.aa3be",
+        "type": "http request",
+        "z": "dfa044c9.744ad8",
+        "g": "2ce083ef.09b3dc",
+        "name": "myRoom with WifiRGB stripe",
+        "method": "POST",
+        "ret": "txt",
+        "paytoqs": "ignore",
+        "url": "http://192.168.178.254/api/v1/state",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "authType": "",
+        "x": 1080,
+        "y": 360,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "25911a12.eda976",
+        "type": "function",
+        "z": "dfa044c9.744ad8",
+        "g": "cf704047.10311",
+        "name": "Set devices",
+        "func": "var x = msg.payload;\n\nglobal.set(\"vars_wifi-ledrgb-01\", x);",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "x": 410,
+        "y": 100,
+        "wires": [
+            []
+        ],
+        "icon": "font-awesome/fa-download"
+    },
+    {
+        "id": "88774ac5.a45488",
+        "type": "inject",
+        "z": "dfa044c9.744ad8",
+        "g": "cf704047.10311",
+        "name": "LEDVars",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": true,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "[\"OFF\",100,0,50,0, \"SUNSET\"]",
+        "payloadType": "json",
+        "x": 180,
+        "y": 100,
+        "wires": [
+            [
+                "25911a12.eda976"
+            ]
+        ]
+    },
+    {
+        "id": "9f7f7308.3ec44",
+        "type": "inject",
+        "z": "dfa044c9.744ad8",
+        "g": "94e71672.6d39c8",
+        "name": "debug all vars",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "",
+        "payloadType": "num",
+        "x": 690,
+        "y": 100,
+        "wires": [
+            [
+                "6610e73e.b24ff8"
+            ]
+        ]
+    },
+    {
+        "id": "6663d8dc.910ca8",
+        "type": "debug",
+        "z": "dfa044c9.744ad8",
+        "g": "94e71672.6d39c8",
+        "name": "",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1070,
+        "y": 100,
+        "wires": []
+    },
+    {
+        "id": "6610e73e.b24ff8",
+        "type": "function",
+        "z": "dfa044c9.744ad8",
+        "g": "94e71672.6d39c8",
+        "name": "debug",
+        "func": "var LEDVars=global.get('vars_wifi-ledrgb-01');\nvar state = LEDVars[0];\nvar brightness =  LEDVars[1];\nvar color = LEDVars[2];\nvar mode =  LEDVars[3];\n//*********************\n\nmsg.payload=\"Debug 01: \" + state + \", \" + brightness + \", \" + color + \", \" + mode;\n\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "x": 910,
+        "y": 100,
+        "wires": [
+            [
+                "6663d8dc.910ca8"
+            ]
+        ]
+    },
+    {
+        "id": "37f2da6f.cbd876",
+        "type": "ui_dropdown",
+        "z": "dfa044c9.744ad8",
+        "g": "2ce083ef.09b3dc",
+        "name": "select mode",
+        "label": "Mode",
+        "tooltip": "",
+        "place": "Select option",
+        "group": "17e97dec.aeb212",
+        "order": 2,
+        "width": 0,
+        "height": 0,
+        "passthru": true,
+        "multiple": false,
+        "options": [
+            {
+                "label": "solid",
+                "value": "SOLID",
+                "type": "str"
+            },
+            {
+                "label": "flash",
+                "value": "FLASH",
+                "type": "str"
+            },
+            {
+                "label": "breathe",
+                "value": "BREATHE",
+                "type": "str"
+            },
+            {
+                "label": "rainbow",
+                "value": "RAINBOW",
+                "type": "str"
+            },
+            {
+                "label": "sunset",
+                "value": "SUNSET",
+                "type": "str"
+            },
+            {
+                "label": "polar",
+                "value": "POLAR",
+                "type": "str"
+            },
+            {
+                "label": "r-g-b",
+                "value": "TRUERGB",
+                "type": "str"
+            },
+            {
+                "label": "rg-gb-br",
+                "value": "2OFRGB",
+                "type": "str"
+            }
+        ],
+        "payload": "",
+        "topic": "",
+        "x": 370,
+        "y": 420,
+        "wires": [
+            [
+                "2509a285.9f0eee"
+            ]
+        ]
+    },
+    {
+        "id": "b1f67fb8.07448",
+        "type": "comment",
+        "z": "dfa044c9.744ad8",
+        "name": "please change to your ip-address",
+        "info": "You need to edit http request node\n\n    myRoom with WifiRGB stripe\n\nto change your ip-address.\n",
+        "x": 1090,
+        "y": 500,
+        "wires": []
+    },
+    {
+        "id": "17e97dec.aeb212",
+        "type": "ui_group",
+        "name": "myRoom with WifiRGB 01",
+        "tab": "bc193cd5.23b6d",
+        "order": 1,
+        "disp": true,
+        "width": "6",
+        "collapse": false
+    },
+    {
+        "id": "bc193cd5.23b6d",
+        "type": "ui_tab",
+        "name": "myRooms with WifiRGB",
+        "icon": "dashboard",
+        "order": 15,
+        "disabled": false,
+        "hidden": false
+    }
+]
