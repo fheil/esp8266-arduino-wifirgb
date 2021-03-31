@@ -6,8 +6,8 @@ will show the color picked up before. Try it out ...
 
 Screenshot of Node-RED flow-editor
 
-![WifiRGB Screenshot in Node-RED flow-editor](imgs/nodered-flow.jpg?raw=true "Title")
+![WifiRGB Screenshot in Node-RED flow-editor](imgs/nodered-flow.pngraw=true "Title")
 
 Screenshot of UI in Node-RED dashboard
 
-![WifiRGB Screenshot in ui dashboard](imgs/nodered-ui.jpg?raw=true "Title")
+![WifiRGB Screenshot in ui dashboard](imgs/nodered-ui.png?raw=true "Title")
