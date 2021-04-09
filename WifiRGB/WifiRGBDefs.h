@@ -2,6 +2,8 @@
  * do NOT change anything below!  
  */
 
+#define LED_BUILTIN_MODE HIGH   // Turn the LED ON/OFF by making the voltage LOW/HIGH
+
 #define REDPIN   14
 #define GREENPIN 12
 #define BLUEPIN   5

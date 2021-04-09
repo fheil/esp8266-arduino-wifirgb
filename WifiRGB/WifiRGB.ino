@@ -6,43 +6,50 @@
 #include <WiFiUdp.h>
 #include <ArduinoOTA.h>
 #include <FadeLed.h>
-#include <hl_DebugDefines_Off.h>
+#include <hl_DebugDefines_On.h>
 
 #include "WifiRGB.h"
 #include "web_admin.h"
 #include "web_interface.h"
 #include "web_iro_js.h"
 
-#ifdef SAVE2EEPROM
+#ifdef SAVE2EEPROM/admin
 #include "WifiRGB2EEPROM.h"
 #endif
 
 FadeLed led[3] = {REDPIN, GREENPIN, BLUEPIN};
 bool bPowerOn = true;
+bool bModeSetupDevice = false;
 byte btMode = modeOFF;
+uint16_t nWifiAttempts = 0;
 uint16_t j = 0;
-uint16_t nStep = 1;
-double f = LED_FLASH_RATIO;
+double f = LED_BREATH_RATIO;
 
 ESP8266WebServer server(80);
 IPAddress clientIP(192, 168, 178, 254); //the IP of the device
-IPAddress gateway(192, 168, 178, 1); //the gateway
-IPAddress subnet(255, 255, 255, 0); //the subnet mask
+IPAddress gateway(192, 168, 178, 1);    //the gateway
+IPAddress subnet(255, 255, 255, 0);     //the subnet mask
 
 #ifdef SAVE2EEPROM
 // Declare a global object variable from the WiFiRGB2EEPROM class.
 WiFiRGB2EEPROM eepromHandler;
+// next line is deprecated (Part 1)
+//WiFiRGB2EEPROM  eepromHandler("your_ssid", "your_wifi_password", , "wifi-ledrgb-01", 50, 0, 100);
 #endif
 
 void ledBuiltinFlasher (int, int);
 void resetOutputs(void);
-void setSavedOutputsPowerOn(void);
+void setSavedOutputsPower(void);
 void setSavedOutputsPowerOn(void);
 void ledStopAll(void);
 void Wheel(byte);
+uint16_t nextIndex(uint16_t, uint16_t, bool);
+
 
 void setup(void) {
   debugBegin(115200);
+  // next line is deprecated (Part 2)
+  //  eepromHandler.WriteRGBValues();
 
 #ifdef SAVE2EEPROM
   setSavedOutputsPowerOn();
@@ -51,105 +58,141 @@ void setup(void) {
   pinMode(LED_BUILTIN, OUTPUT); // Initialize the BUILTIN_LED pin as an output
 
   WiFi.mode(WIFI_STA);
-  WiFi.hostname(deviceName);
+  WiFi.hostname(eepromHandler.getDeviceName());
 
 #ifndef DHCP
   WiFi.config(clientIP, gateway, subnet); // Remove for DHCP
 #endif
+  WiFi.begin(eepromHandler.getSSIDName(), eepromHandler.getPWD());
+  // for development only...
+  //WiFi.begin(eepromHandler.getSSIDName(), String ("force ap mode by wrong password"));
 
-  WiFi.begin(ssid, password);
   debugPrintln("");
 
   // Wait for connection
-  while (WiFi.status() != WL_CONNECTED) {
+  while ((WiFi.status() != WL_CONNECTED) && (nWifiAttempts < WIFI_ATTEMPTS)) {
     // flash internal LED while connecting to WiFi
+    nWifiAttempts++;
     ledBuiltinFlasher (4, 150);
   }
-  debugPrintln("");
-  debugPrint("Connected to ");
-  debugPrintln(ssid);
-  debugPrint("IP address: ");
-  debugPrintln(WiFi.localIP());
 
-  if (MDNS.begin("esp8266")) {
-    debugPrintln("MDNS responder started");
+  if (nWifiAttempts >= WIFI_ATTEMPTS) { //mode: setup device
+    bool bModeSetupDevice = true;
+    debugPrintln("\nEntering SoftAP mode... ");
+    digitalWrite(LED_BUILTIN, !LED_BUILTIN_MODE); // Turn the LED ON/OFF as #defined after wifi is connected
+
+    WiFi.mode(WIFI_AP);           //only access point
+
+    if (WiFi.softAP(SOFTAP_SSID, SOFTAP_PWD))
+    {
+
+      debugPrintln("SoftAP mode ready");
+      debugPrint("set up your device under IP address: ");
+      debugPrintln(WiFi.softAPIP());
+      server.on("/", HTTP_GET, []() {
+        server.send(200, "text/html", String(FPSTR(WEBADMIN_PART1)) +
+                    eepromHandler.getSSIDName() +
+                    FPSTR(WEBADMIN_PART2) +
+                    eepromHandler.getPWD() +
+                    FPSTR(WEBADMIN_PART3) +
+                    eepromHandler.getDeviceName() +
+                    FPSTR(WEBADMIN_PART4) +
+                    String(eepromHandler.getColorR()) +
+                    FPSTR(WEBADMIN_PART5) +
+                    String(eepromHandler.getColorR()) +
+                    FPSTR(WEBADMIN_PART6) +
+                    String(eepromHandler.getColorR()) +
+                    FPSTR(WEBADMIN_PART7)); //Send web page
+      });
+    }
+    else
+    {
+      debugPrintln("SoftAP mode FAILED! - check your setup, reboot device manually");
+    }
   }
+  else   // mode: normal operation
+  {
+    debugPrintln("");
+    debugPrintln(String("Device |") + eepromHandler.getDeviceName() + "| successful connected to |" + eepromHandler.getSSIDName() + "| wifi network");
+    debugPrint("IP address: ");
+    debugPrintln(WiFi.localIP());
 
-  digitalWrite(LED_BUILTIN, LED_BUILTIN_MODE); // Turn the LED ON/OFF as #defined after wifi is connected
+    if (MDNS.begin("esp8266")) {
+      debugPrintln("MDNS responder started");
+    }
+
+    digitalWrite(LED_BUILTIN, LED_BUILTIN_MODE); // Turn the LED ON/OFF as #defined after wifi is connected
 
 #ifdef OTA
-  // Port defaults to 8266
-  // ArduinoOTA.setPort(8266);
+    // Port defaults to 8266
+    // ArduinoOTA.setPort(8266);
 
-  // Hostname defaults to esp8266-[ChipID]
-  // ArduinoOTA.setHostname("myesp8266");
+    // Hostname defaults to esp8266-[ChipID]
+    // ArduinoOTA.setHostname("myesp8266");
 
-  // No authentication by default
-  // ArduinoOTA.setPassword("admin");
+    // No authentication by default
+    // ArduinoOTA.setPassword("admin");
 
-  // Password can be set with it's md5 value as well
-  // MD5(admin) = 21232f297a57a5a743894a0e4a801fc3
-  // ArduinoOTA.setPasswordHash("21232f297a57a5a743894a0e4a801fc3");
+    // Password can be set with it's md5 value as well
+    // MD5(admin) = 21232f297a57a5a743894a0e4a801fc3
+    // ArduinoOTA.setPasswordHash("21232f297a57a5a743894a0e4a801fc3");
 
-  ArduinoOTA.onStart([]() {
-    String type;
-    if (ArduinoOTA.getCommand() == U_FLASH) {
-      type = "sketch";
-    } else { // U_FS
-      type = "filesystem";
-    }
+    ArduinoOTA.onStart([]() {
+      String type;
+      if (ArduinoOTA.getCommand() == U_FLASH) {
+        type = "sketch";
+      } else { // U_FS
+        type = "filesystem";
+      }
 
-    // NOTE: if updating FS this would be the place to unmount FS using FS.end()
-    debugPrintln("Start updating " + type);
-  });
-  ArduinoOTA.onEnd([]() {
-    debugPrintln("\nEnd");
-  });
-  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
-    Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
-  });
-  ArduinoOTA.onError([](ota_error_t error) {
-    debugPrint("Error[");
-    debugPrint(error);
-    debugPrint("]");
-    if (error == OTA_AUTH_ERROR) {
-      debugPrintln("Auth Failed");
-    } else if (error == OTA_BEGIN_ERROR) {
-      debugPrintln("Begin Failed");
-    } else if (error == OTA_CONNECT_ERROR) {
-      debugPrintln("Connect Failed");
-    } else if (error == OTA_RECEIVE_ERROR) {
-      debugPrintln("Receive Failed");
-    } else if (error == OTA_END_ERROR) {
-      debugPrintln("End Failed");
-    }
-  });
-  ArduinoOTA.begin();
+      // NOTE: if updating FS this would be the place to unmount FS using FS.end()
+      debugPrintln("Start updating " + type);
+    });
+    ArduinoOTA.onEnd([]() {
+      debugPrintln("\nEnd");
+    });
+    ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
+      Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
+    });
+    ArduinoOTA.onError([](ota_error_t error) {
+      debugPrint("Error[");
+      debugPrint(error);
+      debugPrint("]");
+      if (error == OTA_AUTH_ERROR) {
+        debugPrintln("Auth Failed");
+      } else if (error == OTA_BEGIN_ERROR) {
+        debugPrintln("Begin Failed");
+      } else if (error == OTA_CONNECT_ERROR) {
+        debugPrintln("Connect Failed");
+      } else if (error == OTA_RECEIVE_ERROR) {
+        debugPrintln("Receive Failed");
+      } else if (error == OTA_END_ERROR) {
+        debugPrintln("End Failed");
+      }
+    });
+    ArduinoOTA.begin();
 #endif
 
 #ifndef SAVE2EEPROM
-  // adjust the PWM range
-  // see https://esp8266.github.io/Arduino/versions/2.0.0/doc/reference.html#analog-output
-  analogWriteRange(255);
+    // adjust the PWM range
+    // see https://esp8266.github.io/Arduino/versions/2.0.0/doc/reference.html#analog-output
+    analogWriteRange(255);
 
-  resetOutputs();
+    resetOutputs();
 #endif
 
-  // Root and 404
-  server.on("/", handleRoot);
-  server.onNotFound(handleNotFound);
+    // Root and 404
+    server.on("/", handleRoot);
+    server.onNotFound(handleNotFound);
 
-  // iro.js User Interface and Javascript
-  server.on("/ui", HTTP_GET, []() {
-    server.send_P(200, "text/html", WEBINTERFACE);
-  });
-  server.on("/admin", HTTP_GET, []() {
-    server.send_P(200, "text/html", WEBADMIN);
-  });
-  server.on("/iro.min.js", HTTP_GET, []() {
-    server.send_P(200, "application/javascript", IRO_JS);
-  });
-
+    // iro.js User Interface and Javascript
+    server.on("/ui", HTTP_GET, []() {
+      server.send_P(200, "text/html", WEBINTERFACE);
+    });
+    server.on("/iro.min.js", HTTP_GET, []() {
+      server.send_P(200, "application/javascript", IRO_JS);
+    });
+  }
   // REST-API
   server.on("/api/v1/state", HTTP_POST, handleApiRequest);
   server.on("/api/v1/reset", HTTP_GET, resetOutputs);
@@ -160,13 +203,17 @@ void setup(void) {
 
 void loop(void) {
   server.handleClient();
-  FadeLed::update();
-  if (bPowerOn) {
-    handleFading();
-  }
+
+  if (!bModeSetupDevice) {
+    FadeLed::update();
+    if (bPowerOn) {
+      handleFading();
+    }
 #ifdef OTA
-  ArduinoOTA.handle();
+    ArduinoOTA.handle();
 #endif
+
+  }
 }
 
 
@@ -225,7 +272,7 @@ void handleApiRequest() {
     debugPrintln(server.arg("plain"));
   */
 
-  const size_t bufferSize = JSON_OBJECT_SIZE(3) + JSON_OBJECT_SIZE(4) + 70;
+  const size_t bufferSize = JSON_OBJECT_SIZE(4) + JSON_OBJECT_SIZE(4) + 170;
   DynamicJsonDocument jsonDocument(bufferSize);
   deserializeJson(jsonDocument, server.arg("plain"));
 
@@ -234,11 +281,10 @@ void handleApiRequest() {
   debugPrintln();
 
   JsonObject root = jsonDocument.as<JsonObject>();
-  const char* state = root["state"]; // "ON" or "OFF"
 
   //leds are off, turn on, read rgb-values from EEPROM
 #ifdef SAVE2EEPROM
-  if ((!bPowerOn) && (strcmp("ON", state) == 0))
+  if ((!bPowerOn) && (root["state"] == "ON"))
   {
     debugPrintln("Reading RGB values from memory...");
     rgb.r = eepromHandler.getColorR();
@@ -253,9 +299,10 @@ void handleApiRequest() {
   FadeLed::update();
 
   //only save values to EEPROM, when switching off
-  if (strcmp("OFF", state) == 0)
+  if (root["state"] == "OFF")
   {
     debugPrintln("State OFF found: switching off");
+    ledSetAllTime(LED_FADE_TIME);
     // Set output to off
     ledSetAllRGB (0, 0 , 0);
     FadeLed::update();
@@ -272,43 +319,55 @@ void handleApiRequest() {
     server.send(200, "application/json", server.arg("plain"));
     return;
   }
+  //set values to eeprom
+  if (root["state"] == "SET")
+  {
+    char buf[_PWD_LEN_];
+    debugPrintln("State SET found: saving to eeprom");
 
+    strcpy (buf, root["wifiSSID"]);
+    eepromHandler.setSSIDName(buf);
+
+    strcpy (buf, root["wifiPWD"]);
+    eepromHandler.setPWD(buf);
+
+    strcpy (buf, root["deviceName"]);
+    eepromHandler.setDeviceName(buf);
+  }
+
+  j = 0; //reset my index to never get out of index
   // support different modes
-  const char* jsonrgbmode = root["mode"]; // "SOLID"
-  if (strcmp("RAINBOW", jsonrgbmode) == 0) {
+  if (root["mode"] == "RAINBOW") {
     ledSetAllTime(LED_RAINBOW_TIME);
 
     btMode = modeRAINBOW;
     server.send(200, "application/json", server.arg("plain"));
     return;
   }
-  if (strcmp("SUNSET", jsonrgbmode) == 0) {
+  if (root["mode"] == "SUNSET") {
     ledSetAllTime(LED_SUNSET_TIME);
-    //    j = 17;
+
     btMode = modeSUNSET;
     server.send(200, "application/json", server.arg("plain"));
     return;
   }
-  if (strcmp("POLAR", jsonrgbmode) == 0) {
+  if (root["mode"] == "POLAR") {
     ledSetAllTime(LED_POLAR_TIME);
-    //    j = 14;
-    //    eepromHandlerSetAllRGB (myRGB[j].r, myRGB[j].g, myRGB[j].b);
+
     btMode = modePOLAR;
     server.send(200, "application/json", server.arg("plain"));
     return;
   }
-  if (strcmp("TRUERGB", jsonrgbmode) == 0) {
+  if (root["mode"] == "TRUERGB") {
     ledSetAllTime(LED_TRUERGB_TIME);
-    //    j = 14;
-    //    eepromHandlerSetAllRGB (myRGB[j].r, myRGB[j].g, myRGB[j].b);
+
     btMode = modeTRUERGB;
     server.send(200, "application/json", server.arg("plain"));
     return;
   }
-  if (strcmp("2OFRGB", jsonrgbmode) == 0) {
+  if (root["mode"] == "2OFRGB") {
     ledSetAllTime(LED_2OFRGB_TIME);
-    //    j = 14;
-    //    eepromHandlerSetAllRGB (myRGB[j].r, myRGB[j].g, myRGB[j].b);
+
     btMode = mode2OFRGB;
     server.send(200, "application/json", server.arg("plain"));
     return;
@@ -353,21 +412,49 @@ void handleApiRequest() {
   debugPrint(", b=");
   debugPrintln(rgb.b);
 
-  if (strcmp("SOLID", jsonrgbmode) == 0) {
+  if (root["mode"] == "SOLID") {
     ledSetAllTime(LED_FADE_TIME);
 
     btMode = modeSOLID;
   }
-
-  if (strcmp("FLASH", jsonrgbmode) == 0) {
+  if (root["mode"] == "FLASH") {
     ledSetAllTime(LED_FLASH_TIME);
 
     btMode = modeFLASH;
   }
-  if (strcmp("BREATHE", jsonrgbmode) == 0) {
+  if (root["mode"] == "BREATHE") {
     ledSetAllTime(LED_FADE_TIME * 2);
 
     btMode = modeBREATHE;
+  }
+
+
+  //set values to eeprom
+  if (root["state"] == "SET")
+  {
+    debugPrint("   SETUP: ");
+    debugPrintln(eepromHandler.getSSIDName());
+    debugPrint("   SETUP: ");
+    debugPrintln(eepromHandler.getPWD());
+    debugPrint("   SETUP: ");
+    debugPrintln(eepromHandler.getDeviceName());
+    debugPrintln("   SETUP: Values to save:");
+    debugPrint("   SETUP: r=");
+    debugPrint(rgb.r);
+    debugPrint(", g=");
+    debugPrint(rgb.g);
+    debugPrint(", b=");
+    debugPrintln(rgb.b);
+
+#ifdef SAVE2EEPROM
+    eepromHandler.WriteRGBValues();
+    server.send(200, "text/html", "Restart_Ok");
+    delay(500);
+    ESP.restart();
+#endif
+    // code will never be reached...
+    server.send(200, "application/json", server.arg("plain"));
+    return;
   }
 
   // Set Output
@@ -423,8 +510,8 @@ void handleFading()
           }
         case modeRAINBOW:
           {
-            Wheel(j++);
-            j %= 100;
+            Wheel(j);
+            j = nextIndex(j, 100, false);
 
             ledSetAllRGB (eepromHandler.getColorR(), eepromHandler.getColorG(), eepromHandler.getColorB());
             break;
@@ -432,32 +519,28 @@ void handleFading()
 
         case modeSUNSET:
           {
-            j++;
-            j %= 3;
+            j = nextIndex(j, 3, true);
 
             ledSetAllRGB (RGBGradient[btMode - modeSUNSET][j].r, RGBGradient[btMode - modeSUNSET][j].g, RGBGradient[btMode - modeSUNSET][j].b);
             break;
           }
         case modePOLAR:
           {
-            j++;
-            j %= 3;
+            j = nextIndex(j, 3, true);
 
             ledSetAllRGB (RGBGradient[btMode - modeSUNSET][j].r, RGBGradient[btMode - modeSUNSET][j].g, RGBGradient[btMode - modeSUNSET][j].b);
             break;
           }
         case modeTRUERGB:
           {
-            j++;
-            j %= 3;
+            j = nextIndex(j, 3, false);
 
             ledSetAllRGB (RGBGradient[btMode - modeSUNSET][j].r, RGBGradient[btMode - modeSUNSET][j].g, RGBGradient[btMode - modeSUNSET][j].b);
             break;
           }
         case mode2OFRGB:
           {
-            j++;
-            j %= 3;
+            j = nextIndex(j, 3, false);
 
             ledSetAllRGB (RGBGradient[btMode - modeSUNSET][j].r, RGBGradient[btMode - modeSUNSET][j].g, RGBGradient[btMode - modeSUNSET][j].b);
             break;
@@ -482,12 +565,26 @@ void resetOutputs() {
 
 #ifdef SAVE2EEPROM
 void setSavedOutputs() {
-  debugPrintln("EEPROM: start restore data...");
+  debugPrintln("");
+  debugPrintln("_______________________________");
+  debugPrintln("EEPROM: start restore data ...");
+
   eepromHandler.ReadRGBValues();
 
-  ledSetAllRGB (eepromHandler.getColorR(), eepromHandler.getColorG(), eepromHandler.getColorB());
-
+  debugPrint("    SSID read from EEPROM:       |");
+  debugPrint(eepromHandler.getSSIDName());
+  debugPrintln("|");
+  debugPrint("    PWD read from EEPROM:        |");
+  // be aware of the the meaning by enabling next line
+  //debugPrint(eepromHandler.getPWD());
+  debugPrintln("|");
+  debugPrint("    DeviceName read from EEPROM: |");
+  debugPrint(eepromHandler.getDeviceName());
+  debugPrintln("|");
   debugPrintln("EEPROM: finished, data restored");
+  debugPrintln("_______________________________");
+
+  ledSetAllRGB (eepromHandler.getColorR(), eepromHandler.getColorG(), eepromHandler.getColorB());
 }
 
 void setSavedOutputsPowerOn() {
@@ -590,9 +687,23 @@ void eepromHandlerSetAllRGB (int r, int g, int b)
 
 void ledSetAllRGB (int r, int g, int b)
 {
+#ifdef USE_R
   led[iR].set(r);
+#else
+  led[iR].set(0);
+#endif
+
+#ifdef USE_G
   led[iG].set(g);
+#else
+  led[iG].set(0);
+#endif
+
+#ifdef USE_B
   led[iB].set(b);
+#else
+  led[iB].set(0);
+#endif
 }
 
 void ledStopAll(void)
@@ -607,6 +718,31 @@ void ledSetAllTime(int t)
   led[iR].setTime(t, true);
   led[iG].setTime(t, true);
   led[iB].setTime(t, true);
+}
+
+uint16_t nextIndex(uint16_t idx, uint16_t steps, bool bModeUpAndDown)
+{
+  static int nStep = 1;
+
+  if (bModeUpAndDown)
+  {
+    if (idx >= (steps - 1))
+    {
+      nStep = -1;
+    }
+
+    if (idx <= 0)
+    {
+      nStep = 1;
+    }
+    idx = idx +  nStep;
+  }
+  else
+  {
+    idx ++;
+    idx %= steps;
+  }
+  return idx;
 }
 
 void ledBuiltinFlasher (int count, int delayTime) {
